@@ -9,7 +9,7 @@
  *   Then change BASE_URL to '/api/marble/v1'
  */
 
-const BASE_URL = '/api';
+const BASE_URL = '/wl-proxy';
 
 function getApiKey() {
     const key = sessionStorage.getItem('wl_api_key');
@@ -53,23 +53,31 @@ export async function uploadImage(blob, index = 0) {
     const uploadUrl = upload_info.upload_url;
     const requiredHeaders = upload_info.required_headers || {};
 
-    // 1. NÃO vamos forçar o Content-Type. O Google Cloud é super chato com a "assinatura" do link.
-    // Vamos enviar EXATAMENTE e APENAS os headers que a World Labs pediu.
-    const uploadHeaders = { ...requiredHeaders };
+    // Converte o Blob (Imagem) para Base64
+    const base64Data = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = () => {
+            // Pega apenas o texto da imagem e ignora o cabeçalho do Base64
+            const base64string = reader.result.split(',')[1];
+            resolve(base64string);
+        };
+    });
 
-    // 2. O Pulo do Gato: Envolvemos a URL do Google Cloud em um Proxy Público de CORS
-    const proxiedUrl = `https://corsproxy.io/?${encodeURIComponent(uploadUrl)}`;
-
-    // 3. Fazemos o upload através do proxy
-    const uploadRes = await fetch(proxiedUrl, {
-        method: upload_info.upload_method || 'PUT',
-        headers: uploadHeaders,
-        body: blob,
+    // Manda pro nosso servidor Vercel fazer o upload sujo
+    const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            fileBase64: base64Data,
+            uploadUrl: uploadUrl,
+            headers: requiredHeaders,
+        }),
     });
 
     if (!uploadRes.ok) {
         const errorBody = await uploadRes.text();
-        throw new Error(`Image upload failed (${uploadRes.status}): ${errorBody}`);
+        throw new Error(`Image upload failed via Server (${uploadRes.status}): ${errorBody}`);
     }
 
     return mediaAssetId;
