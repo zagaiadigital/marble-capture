@@ -119,8 +119,8 @@ export async function generateWorld(mediaAssetId, model = 'Marble 0.1-plus') {
  * Step D: Poll an operation until done.
  */
 export async function pollOperation(operationId, onStatus) {
-    const POLL_INTERVAL = 5000; // 5 seconds
-    const MAX_POLLS = 120; // 10 minutes max
+    const POLL_INTERVAL = 10000; // 10 seconds
+    const MAX_POLLS = 180; // 30 minutes max
 
     for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
         const res = await fetch(`${BASE_URL}/operations/${operationId}`, {
@@ -156,7 +156,7 @@ export async function pollOperation(operationId, onStatus) {
         await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
     }
 
-    throw new Error('Operation timed out after 10 minutes.');
+    throw new Error('Operation timed out after 30 minutes.');
 }
 
 /**
