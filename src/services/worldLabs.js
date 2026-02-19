@@ -53,15 +53,15 @@ export async function uploadImage(blob, index = 0) {
     const uploadUrl = upload_info.upload_url;
     const requiredHeaders = upload_info.required_headers || {};
 
-    // A2: Upload the binary blob to the signed URL
+    // 1. NÃO vamos forçar o Content-Type. O Google Cloud é super chato com a "assinatura" do link.
+    // Vamos enviar EXATAMENTE e APENAS os headers que a World Labs pediu.
     const uploadHeaders = { ...requiredHeaders };
-    // The docs show Content-Type: image/jpeg for the PUT upload
-    // but the signed URL may handle this — include it to be safe
-    if (!uploadHeaders['Content-Type']) {
-        uploadHeaders['Content-Type'] = 'image/jpeg';
-    }
 
-    const uploadRes = await fetch(uploadUrl, {
+    // 2. O Pulo do Gato: Envolvemos a URL do Google Cloud em um Proxy Público de CORS
+    const proxiedUrl = `https://corsproxy.io/?${encodeURIComponent(uploadUrl)}`;
+
+    // 3. Fazemos o upload através do proxy
+    const uploadRes = await fetch(proxiedUrl, {
         method: upload_info.upload_method || 'PUT',
         headers: uploadHeaders,
         body: blob,
