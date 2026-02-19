@@ -49,7 +49,7 @@ export async function uploadImage(blob, index = 0) {
 
     const prepareData = await prepareRes.json();
     const { media_asset, upload_info } = prepareData;
-    const mediaAssetId = media_asset.id;
+    const mediaAssetId = media_asset.media_asset_id || media_asset.id;
     const uploadUrl = upload_info.upload_url;
     const requiredHeaders = upload_info.required_headers || {};
 
