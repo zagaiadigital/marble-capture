@@ -1,12 +1,8 @@
 /**
  * World Labs API Service
- * Handles the multi-step async flow: upload images → generate world → poll for result
+ * Handles the multi-step async flow: upload video → generate world → poll for result
  *
  * Base URL: https://api.worldlabs.ai/marble/v1
- *
- * CORS Note: If the browser blocks direct calls, configure a Vite proxy in vite.config.js:
- *   server: { proxy: { '/api': { target: 'https://api.worldlabs.ai', changeOrigin: true, rewrite: (p) => p.replace(/^\/api/, '') } } }
- *   Then change BASE_URL to '/api/marble/v1'
  */
 
 const BASE_URL = '/wl-proxy';
@@ -25,20 +21,16 @@ function apiHeaders() {
 }
 
 /**
- * Step A: Upload a single image blob to World Labs.
- * 1. POST /media-assets:prepare_upload → get upload_url + media_asset_id
- * 2. PUT upload_url with the binary blob (respecting required_headers)
- * Returns: media_asset_id
+ * Step A: Prepare Upload
  */
-export async function uploadImage(blob, index = 0) {
-    // A1: Prepare upload
+export async function prepareUpload(fileName = 'capture.mp4') {
     const prepareRes = await fetch(`${BASE_URL}/media-assets:prepare_upload`, {
         method: 'POST',
         headers: apiHeaders(),
         body: JSON.stringify({
-            file_name: `capture_${index}.jpg`,
-            kind: 'image',
-            extension: 'jpg',
+            file_name: fileName,
+            kind: 'video',
+            extension: 'mp4',
         }),
     });
 
@@ -48,89 +40,62 @@ export async function uploadImage(blob, index = 0) {
     }
 
     const prepareData = await prepareRes.json();
-    const { media_asset, upload_info } = prepareData;
-    const mediaAssetId = media_asset.media_asset_id || media_asset.id;
-    const uploadUrl = upload_info.upload_url;
-    const requiredHeaders = upload_info.required_headers || {};
+    return prepareData; // { media_asset: {...}, upload_info: {...} }
+}
 
-    // Converte o Blob (Imagem) para Base64
-    const base64Data = await new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(blob);
-        reader.onloadend = () => {
-            // Pega apenas o texto da imagem e ignora o cabeçalho do Base64
-            const base64string = reader.result.split(',')[1];
-            resolve(base64string);
+/**
+ * Step B: Direct Video Upload via XMLHttpRequest
+ */
+export function uploadVideoDirect(file, uploadUrl, requiredHeaders, onProgress) {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        // CRITICAL FIX: Route the upload through the Vercel rewrite proxy to bypass CORS
+        const proxiedUploadUrl = uploadUrl.replace('https://storage.googleapis.com/', '/gcs-proxy/');
+
+        xhr.open('PUT', proxiedUploadUrl, true);
+
+        // Set required headers from World Labs API
+        for (const [key, value] of Object.entries(requiredHeaders)) {
+            xhr.setRequestHeader(key, String(value));
+        }
+
+        // Set content type
+        xhr.setRequestHeader('Content-Type', 'video/mp4');
+
+        // Progress listener
+        xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+                const percentage = Math.round((event.loaded / event.total) * 100);
+                if (onProgress) onProgress(percentage);
+            }
         };
+
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                resolve();
+            } else {
+                reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.responseText}`));
+            }
+        };
+
+        xhr.onerror = () => reject(new Error('Network error during video upload.'));
+        xhr.send(file);
     });
-
-    // Manda pro nosso servidor Vercel fazer o upload sujo
-    const uploadRes = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            fileBase64: base64Data,
-            uploadUrl: uploadUrl,
-            headers: requiredHeaders,
-        }),
-    });
-
-    if (!uploadRes.ok) {
-        const errorBody = await uploadRes.text();
-        throw new Error(`Image upload failed via Server (${uploadRes.status}): ${errorBody}`);
-    }
-
-    return mediaAssetId;
 }
 
 /**
- * Upload all images with controlled concurrency.
- * Returns array of { id, azimuth }.
- * onProgress(uploaded, total) called after each upload completes.
+ * Step C: Trigger world generation with the uploaded video asset.
  */
-export async function uploadAllImages(capturedImages, onProgress) {
-    const CONCURRENCY = 3;
-    const results = [];
-    let completed = 0;
-
-    // Process in batches of CONCURRENCY
-    for (let i = 0; i < capturedImages.length; i += CONCURRENCY) {
-        const batch = capturedImages.slice(i, i + CONCURRENCY);
-        const batchResults = await Promise.all(
-            batch.map(async (img, batchIndex) => {
-                const globalIndex = i + batchIndex;
-                const mediaAssetId = await uploadImage(img.blob, globalIndex);
-                completed++;
-                if (onProgress) onProgress(completed, capturedImages.length);
-                return { id: mediaAssetId, azimuth: img.azimuth };
-            })
-        );
-        results.push(...batchResults);
-    }
-
-    return results;
-}
-
-/**
- * Step B: Trigger world generation with 8 uploaded media assets.
- * Returns: operation_id
- */
-export async function generateWorld(assetIds, model = 'Marble 0.1-mini') {
-    const multiImagePrompt = assetIds.map(({ id, azimuth }) => ({
-        azimuth,
-        content: {
-            source: 'media_asset',
-            media_asset_id: id,
-        },
-    }));
-
+export async function generateWorld(mediaAssetId, model = 'Marble 0.1-plus') {
     const body = {
-        display_name: '360 Capture',
+        display_name: 'Video World',
         world_prompt: {
-            type: 'multi-image',
-            reconstruct_images: true,
-            multi_image_prompt: multiImagePrompt,
-            text_prompt: 'A 360 capture of a space',
+            type: 'video',
+            video_prompt: {
+                source: 'media_asset',
+                media_asset_id: mediaAssetId,
+            }
         },
         model,
     };
@@ -151,9 +116,7 @@ export async function generateWorld(assetIds, model = 'Marble 0.1-mini') {
 }
 
 /**
- * Step C: Poll an operation until done.
- * Returns the full response object from the completed operation.
- * onStatus(description) called on each poll with the progress description.
+ * Step D: Poll an operation until done.
  */
 export async function pollOperation(operationId, onStatus) {
     const POLL_INTERVAL = 5000; // 5 seconds
@@ -197,29 +160,29 @@ export async function pollOperation(operationId, onStatus) {
 }
 
 /**
- * Full orchestration: upload all images → generate → poll → return result.
- * onProgress({ phase, detail, uploaded, total }) for UI updates.
+ * Full orchestration: upload video → generate → poll → return result.
+ * onProgress({ phase, detail, percentage }) for UI updates.
  */
-export async function uploadAndGenerate(capturedImages, onProgress) {
-    // Phase 1: Upload images
-    onProgress({ phase: 'upload', detail: 'Preparing uploads...', uploaded: 0, total: capturedImages.length });
+export async function uploadAndGenerate(videoFile, onProgress) {
+    // Phase 1 A: Prepare
+    onProgress({ phase: 'upload', detail: 'Preparing upload url...', percentage: 0 });
+    const authAndUploadInfo = await prepareUpload(videoFile.name || 'capture.mp4');
 
-    const assetIds = await uploadAllImages(capturedImages, (uploaded, total) => {
-        onProgress({
-            phase: 'upload',
-            detail: `Uploading image ${uploaded} of ${total}...`,
-            uploaded,
-            total,
-        });
+    const mediaAssetId = authAndUploadInfo.media_asset.media_asset_id || authAndUploadInfo.media_asset.id;
+    const uploadUrl = authAndUploadInfo.upload_info.upload_url;
+    const requiredHeaders = authAndUploadInfo.upload_info.required_headers || {};
+
+    // Phase 1 B: Direct Upload
+    await uploadVideoDirect(videoFile, uploadUrl, requiredHeaders, (percentage) => {
+        onProgress({ phase: 'upload', detail: `Uploading Video (${percentage}%)...`, percentage });
     });
 
     // Phase 2: Trigger generation
-    onProgress({ phase: 'generate', detail: 'Starting world generation...' });
-    const operationId = await generateWorld(assetIds);
+    onProgress({ phase: 'generate', detail: 'Processing in Cloud...', percentage: 100 });
+    const operationId = await generateWorld(mediaAssetId);
 
     // Phase 3: Poll for result
-    onProgress({ phase: 'poll', detail: 'World generation in progress...' });
-
+    onProgress({ phase: 'poll', detail: 'Generating 3D World (takes ~5 mins)...' });
     const result = await pollOperation(operationId, (description) => {
         onProgress({ phase: 'poll', detail: description });
     });

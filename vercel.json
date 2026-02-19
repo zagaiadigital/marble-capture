@@ -3,6 +3,10 @@
     {
       "source": "/wl-proxy/:path*",
       "destination": "https://api.worldlabs.ai/marble/v1/:path*"
+    },
+    {
+      "source": "/gcs-proxy/:path*",
+      "destination": "https://storage.googleapis.com/:path*"
     }
   ]
 }

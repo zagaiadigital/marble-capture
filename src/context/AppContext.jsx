@@ -14,7 +14,7 @@ export function AppProvider({ children }) {
         return sessionStorage.getItem('wl_api_key') || '';
     });
     const [screen, setScreen] = useState(SCREENS.HOME);
-    const [capturedImages, setCapturedImages] = useState([]);
+    const [videoFile, setVideoFile] = useState(null);
     const [worldResult, setWorldResult] = useState(null);
 
     const setApiKey = useCallback((key) => {
@@ -26,44 +26,25 @@ export function AppProvider({ children }) {
         }
     }, []);
 
-    const addCapturedImage = useCallback((imageData) => {
-        setCapturedImages((prev) => [...prev, imageData]);
-    }, []);
-
     const resetCapture = useCallback(() => {
-        // Revoke any existing blob URLs
-        capturedImages.forEach((img) => {
-            if (img.url) URL.revokeObjectURL(img.url);
-        });
-        setCapturedImages([]);
+        setVideoFile(null);
         setScreen(SCREENS.CAPTURE);
-    }, [capturedImages]);
+    }, []);
 
     const resetAll = useCallback(() => {
-        capturedImages.forEach((img) => {
-            if (img.url) URL.revokeObjectURL(img.url);
-        });
-        setCapturedImages([]);
+        setVideoFile(null);
         setWorldResult(null);
         setScreen(SCREENS.HOME);
-    }, [capturedImages]);
-
-    // Cleanup blob URLs on unmount
-    useEffect(() => {
-        return () => {
-            capturedImages.forEach((img) => {
-                if (img.url) URL.revokeObjectURL(img.url);
-            });
-        };
     }, []);
 
+    // No blob cleanup needed if passing raw File objects
     const value = {
         apiKey,
         setApiKey,
         screen,
         setScreen,
-        capturedImages,
-        addCapturedImage,
+        videoFile,
+        setVideoFile,
         resetCapture,
         resetAll,
         worldResult,

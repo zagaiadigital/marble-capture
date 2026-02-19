@@ -1,18 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { uploadAndGenerate } from '../services/worldLabs';
 import {
     RotateCcw,
     Sparkles,
-    ImageIcon,
+    Video,
     Upload,
     Loader2,
     Globe,
     AlertTriangle,
     X,
 } from 'lucide-react';
-
-const DIRECTION_LABELS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
 // Phase-specific icons and colors
 const PHASE_CONFIG = {
@@ -22,24 +20,35 @@ const PHASE_CONFIG = {
 };
 
 export default function ReviewScreen() {
-    const { capturedImages, resetCapture, setScreen, setWorldResult, SCREENS } =
+    const { videoFile, setVideoFile, resetCapture, setScreen, setWorldResult, SCREENS } =
         useAppContext();
 
     const [isProcessing, setIsProcessing] = useState(false);
     const [progress, setProgress] = useState(null);
     const [error, setError] = useState(null);
+    const [videoUrl, setVideoUrl] = useState(null);
+
+    useEffect(() => {
+        if (videoFile) {
+            const url = URL.createObjectURL(videoFile);
+            setVideoUrl(url);
+            return () => URL.revokeObjectURL(url);
+        }
+    }, [videoFile]);
 
     const handleGenerate = async () => {
+        if (!videoFile) return;
         setIsProcessing(true);
         setError(null);
 
         try {
-            const result = await uploadAndGenerate(capturedImages, (progressInfo) => {
+            const result = await uploadAndGenerate(videoFile, (progressInfo) => {
                 setProgress(progressInfo);
             });
 
             // Store result and navigate
             setWorldResult(result);
+            setVideoUrl(null); // Clean up before navigating
             setScreen(SCREENS.RESULT);
         } catch (err) {
             console.error('Generation failed:', err);
@@ -47,6 +56,21 @@ export default function ReviewScreen() {
             setIsProcessing(false);
         }
     };
+
+    if (!videoFile) {
+        return (
+            <div className="h-full w-full flex flex-col items-center justify-center bg-cyber-bg px-6 text-center">
+                <AlertTriangle className="w-12 h-12 text-neon-red mb-4" />
+                <p className="text-white mb-4">No video selected.</p>
+                <button
+                    onClick={resetCapture}
+                    className="px-6 py-2 glass rounded-xl text-cyber-text hover:text-white"
+                >
+                    Go Back
+                </button>
+            </div>
+        );
+    }
 
     // Processing overlay
     if (isProcessing && !error) {
@@ -82,18 +106,18 @@ export default function ReviewScreen() {
                     </p>
 
                     {/* Upload progress bar */}
-                    {progress?.phase === 'upload' && progress.total > 0 && (
+                    {progress?.phase === 'upload' && progress.percentage !== undefined && (
                         <div className="w-64 mb-4">
                             <div className="h-1.5 bg-cyber-surface rounded-full overflow-hidden">
                                 <div
-                                    className="h-full bg-neon-green rounded-full transition-all duration-500 ease-out"
+                                    className="h-full bg-neon-green rounded-full transition-all duration-300 ease-out"
                                     style={{
-                                        width: `${(progress.uploaded / progress.total) * 100}%`,
+                                        width: `${progress.percentage}%`,
                                     }}
                                 />
                             </div>
                             <p className="font-mono text-[10px] text-cyber-text-dim mt-1.5 text-center">
-                                {progress.uploaded} / {progress.total} IMAGES
+                                {progress.percentage}%
                             </p>
                         </div>
                     )}
@@ -101,7 +125,7 @@ export default function ReviewScreen() {
                     {/* Elapsed time hint */}
                     <p className="font-mono text-[10px] text-cyber-text-dim/50 mt-4">
                         {progress?.phase === 'poll'
-                            ? 'THIS MAY TAKE 2-5 MINUTES'
+                            ? 'THIS MAY TAKE ~5 MINUTES'
                             : 'DO NOT CLOSE THIS TAB'}
                     </p>
                 </div>
@@ -116,11 +140,11 @@ export default function ReviewScreen() {
                 <div>
                     <h2 className="text-lg font-bold text-white">Capture Complete</h2>
                     <p className="text-xs font-mono text-cyber-text-dim">
-                        {capturedImages.length} PHOTOS · 360° COVERAGE
+                        VIDEO SOURCE · READY
                     </p>
                 </div>
                 <div className="w-10 h-10 rounded-xl bg-neon-green/10 border border-neon-green/20 flex items-center justify-center">
-                    <ImageIcon className="w-5 h-5 text-neon-green" strokeWidth={1.5} />
+                    <Video className="w-5 h-5 text-neon-green" strokeWidth={1.5} />
                 </div>
             </div>
 
@@ -138,31 +162,28 @@ export default function ReviewScreen() {
                 </div>
             )}
 
-            {/* Image Grid */}
-            <div className="flex-1 p-3 overflow-auto">
-                <div className="grid grid-cols-2 gap-2">
-                    {capturedImages.map((img, index) => (
-                        <div
-                            key={index}
-                            className="relative aspect-[4/3] rounded-xl overflow-hidden border border-cyber-border group animate-fade-in"
-                            style={{ animationDelay: `${index * 50}ms` }}
-                        >
-                            <img
-                                src={img.url}
-                                alt={`Capture ${index + 1}`}
-                                className="w-full h-full object-cover"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                            <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
-                                <span className="font-mono text-[10px] text-white/80 bg-black/40 rounded px-1.5 py-0.5">
-                                    {img.azimuth}° {DIRECTION_LABELS[index]}
-                                </span>
-                                <span className="font-mono text-[10px] text-neon-green bg-black/40 rounded px-1.5 py-0.5">
-                                    #{index + 1}
-                                </span>
-                            </div>
-                        </div>
-                    ))}
+            {/* Video Preview */}
+            <div className="flex-1 p-4 overflow-hidden flex flex-col items-center justify-center">
+                <div className="w-full h-full relative rounded-2xl overflow-hidden border border-cyber-border group bg-black">
+                    {videoUrl && (
+                        <video
+                            src={videoUrl}
+                            controls
+                            autoPlay
+                            muted
+                            loop
+                            className="w-full h-full object-contain"
+                        />
+                    )}
+                    <div className="absolute top-3 left-3 flex items-center gap-2">
+                        <span className="font-mono text-[10px] text-white/80 bg-black/60 rounded px-2 py-1 flex items-center gap-1.5 backdrop-blur-sm border border-cyber-border/50">
+                            <span className="w-1.5 h-1.5 rounded-full bg-neon-green animate-pulse" />
+                            RAW VIDEO
+                        </span>
+                        <span className="font-mono text-[10px] text-white/80 bg-black/60 rounded px-2 py-1 backdrop-blur-sm border border-cyber-border/50">
+                            {(videoFile.size / (1024 * 1024)).toFixed(1)} MB
+                        </span>
+                    </div>
                 </div>
             </div>
 
@@ -183,7 +204,7 @@ export default function ReviewScreen() {
                     className="w-full glass py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm font-medium text-cyber-text-dim hover:text-white transition-colors disabled:opacity-30"
                 >
                     <RotateCcw className="w-4 h-4" strokeWidth={1.5} />
-                    Retake All Photos
+                    Retake Video
                 </button>
             </div>
         </div>
