@@ -9,7 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google/genai": "^1.42.0",
     "@photo-sphere-viewer/core": "^5.14.1",
+    "@photo-sphere-viewer/markers-plugin": "^5.14.1",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

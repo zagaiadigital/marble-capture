@@ -8,9 +8,7 @@ import {
     generateInpaintPano,
     extractWorldResult
 } from '../services/worldLabs';
-import { ReactPhotoSphereViewer } from 'react-photo-sphere-viewer';
-import '@photo-sphere-viewer/core/index.css';
-import MaskCanvas from '../components/MaskCanvas';
+import PhotoSphereEditor from '../components/PhotoSphereEditor';
 import {
     RotateCcw,
     Sparkles,
@@ -41,15 +39,21 @@ export default function ReviewScreen() {
     // Sub-components state
     const [isEditing, setIsEditing] = useState(false);
     const [showPromptInput, setShowPromptInput] = useState(false);
-    const [maskBase64, setMaskBase64] = useState(null);
+    const [cropData, setCropData] = useState(null);
     const [editPrompt, setEditPrompt] = useState("");
+    const [markers, setMarkers] = useState([]);
 
-    // Start Step 1 automatically (Extract Draft Pano from Video)
+    // Start Step 1 automatically (Extract Draft Pano from Video, or use Image directly)
     useEffect(() => {
         if (!videoFile || error) return;
 
         // Prevent double fire in strict mode
         if (panoUrl || progress) return;
+
+        if (videoFile.type.startsWith('image/')) {
+            setPanoUrl(URL.createObjectURL(videoFile));
+            return;
+        }
 
         const extractDraftPano = async () => {
             setError(null);
@@ -96,38 +100,51 @@ export default function ReviewScreen() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [videoFile]);
 
-    // Step 3 (Editing Loop) - Save Mask
-    const handleSaveMask = (base64String) => {
-        setMaskBase64(base64String);
+    // Step 3 (Editing Loop) - Save Extraction
+    const handleExtractionComplete = (data) => {
+        setCropData(data);
         setIsEditing(false);
         setShowPromptInput(true);
     };
 
     // Step 3 (Editing Loop) - Call API Mode B
     const handleGenerateEdit = async () => {
-        if (!editPrompt.trim() || !maskBase64 || !panoUrl) return;
+        if (!editPrompt.trim() || !cropData || !panoUrl) return;
 
         setShowPromptInput(false);
         setError(null);
         setProgress({ phase: 'inpaint', detail: 'Processing Edit request...' });
 
         try {
-            const operationId = await generateInpaintPano(panoUrl, maskBase64, editPrompt.trim());
-
-            const result = await pollOperation(operationId, (description) => {
-                setProgress({ phase: 'inpaint', detail: description });
+            const response = await fetch('/api/edit-area', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt: editPrompt.trim(),
+                    base64Image: cropData.base64Crop,
+                    pitch: cropData.pitch,
+                    yaw: cropData.yaw
+                })
             });
 
-            const extractedResult = await extractWorldResult(result);
-            if (extractedResult.panoUrl) {
-                // Return to Studio view with new pano image
-                setPanoUrl(extractedResult.panoUrl);
-                setMaskBase64(null);
-                setEditPrompt("");
-                setProgress(null);
-            } else {
-                throw new Error("Edit generation didn't return a pano_url.");
-            }
+            if (!response.ok) throw new Error('Failed to generate edit');
+
+            const data = await response.json();
+
+            // Re-apply prefix for browser rendering
+            const renderableImage = "data:image/jpeg;base64," + data.editedImage;
+
+            setMarkers(prev => [...prev, {
+                id: `edited-${Date.now()}`,
+                position: { pitch: cropData.pitch, yaw: cropData.yaw },
+                image: renderableImage,
+                size: { width: cropData.width, height: cropData.height },
+                anchor: 'center center',
+            }]);
+
+            setCropData(null);
+            setEditPrompt("");
+            setProgress(null);
         } catch (err) {
             console.error('Inpaint Edition failed:', err);
             setError(err.message);
@@ -198,16 +215,6 @@ export default function ReviewScreen() {
         );
     }
 
-    // Mask Canvas Editor Overlay
-    if (isEditing && panoUrl) {
-        return (
-            <MaskCanvas
-                imageUrl={panoUrl}
-                onSaveMask={handleSaveMask}
-                onCancel={() => setIsEditing(false)}
-            />
-        );
-    }
 
     // Studio View
     return (
@@ -238,33 +245,20 @@ export default function ReviewScreen() {
             )}
 
             <div className="flex-1 p-4 overflow-hidden flex flex-col items-center justify-center">
-                <div className="w-full relative rounded-2xl overflow-hidden border border-cyber-border group bg-black h-full max-h-[60vh] shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+                <div className="w-full relative h-full max-h-[60vh]">
                     {panoUrl ? (
-                        <div className="w-full h-full cursor-grab active:cursor-grabbing">
-                            <ReactPhotoSphereViewer
-                                src={panoUrl}
-                                height="100%"
-                                width="100%"
-                                containerClass="w-full h-full"
-                                navbar={[]}
-                                defaultYaw={0}
-                                defaultPitch={0}
-                                touchmoveTwoFingers={true}
-                                mousewheel={true}
-                            />
-                        </div>
+                        <PhotoSphereEditor
+                            panoUrl={panoUrl}
+                            isEditing={isEditing}
+                            onCancelEdit={() => setIsEditing(false)}
+                            onExtractionComplete={handleExtractionComplete}
+                            markers={markers}
+                        />
                     ) : (
-                        <div className="w-full h-full flex items-center justify-center">
+                        <div className="w-full h-full flex items-center justify-center bg-black rounded-2xl border border-cyber-border shadow-[0_0_40px_rgba(0,0,0,0.5)]">
                             <span className="text-cyber-text-dim">Studio Loading...</span>
                         </div>
                     )}
-
-                    <div className="absolute top-3 left-3 flex items-center gap-2 z-10 pointer-events-none">
-                        <span className="font-mono text-[10px] text-white/80 bg-black/60 rounded px-2 py-1 flex items-center gap-1.5 backdrop-blur-sm border border-cyber-border/50">
-                            <span className="w-1.5 h-1.5 rounded-full bg-neon-amber animate-pulse" />
-                            INTERACTIVE 360 STUDIO
-                        </span>
-                    </div>
                 </div>
             </div>
 

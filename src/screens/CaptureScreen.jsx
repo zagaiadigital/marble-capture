@@ -52,10 +52,10 @@ export default function CaptureScreen() {
 
                     <ol className="space-y-4">
                         {[
-                            "Select 0.5x Ultra-Wide Lens.",
-                            "Lock Exposure.",
-                            "Pan slowly 360° around the subject.",
-                            "Maximum duration: 30 seconds."
+                            "Upload a 360º equirectangular image (.jpg)",
+                            "- OR -",
+                            "Upload a video panning 360° around the subject.",
+                            "Maximum video duration: 30 seconds."
                         ].map((instruction, idx) => (
                             <li key={idx} className="flex gap-3 text-sm text-cyber-text">
                                 <span className="font-mono text-neon-green opacity-70">
@@ -72,8 +72,7 @@ export default function CaptureScreen() {
             <div className="z-10 w-full max-w-sm pb-8 pt-10 flex flex-col items-center gap-4">
                 <input
                     type="file"
-                    accept="video/mp4,video/quicktime,video/*"
-                    capture="environment"
+                    accept="video/*,image/jpeg,image/png"
                     ref={fileInputRef}
                     onChange={handleFileChange}
                     className="hidden"
@@ -85,7 +84,7 @@ export default function CaptureScreen() {
                 >
                     <div className="absolute inset-0 bg-neon-green/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300 pointer-events-none" />
                     <Camera className="w-6 h-6 relative z-10" />
-                    <span className="relative z-10">OPEN NATIVE CAMERA</span>
+                    <span className="relative z-10">UPLOAD 360 IMAGE OR VIDEO</span>
                     <ChevronRight className="w-5 h-5 absolute right-4 opacity-50 group-hover:translate-x-1 group-hover:opacity-100 transition-all z-10" />
                 </button>
             </div>
