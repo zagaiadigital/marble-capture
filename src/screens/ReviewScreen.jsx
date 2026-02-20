@@ -111,34 +111,45 @@ export default function ReviewScreen() {
         setShowPromptInput(true);
     };
 
-    // Step 3 (Editing Loop) - Call API Mode B
+    // Step 3 (Editing Loop) - Call Gemini Imagen inpaint
     const handleGenerateEdit = async () => {
         if (!editPrompt.trim() || !cropData || !panoUrl) return;
 
         setShowPromptInput(false);
         setError(null);
-        setProgress({ phase: 'inpaint', detail: 'Applying AI Edit to 360 World...' });
+        setProgress({ phase: 'inpaint', detail: 'Sending to AI...' });
 
         try {
-            // mode B: Trigger Inpaint
-            const operationId = await generateInpaintPano(panoUrl, cropData.base64Crop, editPrompt.trim());
-
-            // Poll for the result
-            const result = await pollOperation(operationId, (description) => {
-                setProgress({ phase: 'inpaint', detail: description });
+            const response = await fetch('/api/edit-area', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt: editPrompt.trim(),
+                    base64Image: cropData.base64Crop,
+                    base64Mask: cropData.base64Mask,
+                    pitch: cropData.pitch,
+                    yaw: cropData.yaw,
+                })
             });
 
-            const extractedResult = await extractWorldResult(result);
-            if (extractedResult.panoUrl) {
-                // Completely replace the current Pano with the newly edited World
-                setPanoUrl(extractedResult.panoUrl);
-                // Clear any leftover markers (if needed) or keep them. WL returns a newly painted image, no DOM marker needed!
-            } else {
-                throw new Error("Edit succeeded but returned no pano_url.");
+            if (!response.ok) {
+                const errBody = await response.json().catch(() => ({ message: 'Unknown server error' }));
+                throw new Error(errBody.message || `Server error ${response.status}`);
             }
 
+            const data = await response.json();
+            const renderableImage = 'data:image/jpeg;base64,' + data.editedImage;
+
+            setMarkers(prev => [...prev, {
+                id: `edited-${Date.now()}`,
+                position: { pitch: cropData.pitch, yaw: cropData.yaw },
+                image: renderableImage,
+                size: { width: cropData.width, height: cropData.height },
+                anchor: 'center center',
+            }]);
+
             setCropData(null);
-            setEditPrompt("");
+            setEditPrompt('');
             setProgress(null);
         } catch (err) {
             console.error('Inpaint Edition failed:', err);
@@ -146,6 +157,7 @@ export default function ReviewScreen() {
             setProgress(null);
         }
     };
+
 
     // Step 4 (Finalization) - Export and navigate
     const handleFinishAndExport = () => {

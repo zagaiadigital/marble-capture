@@ -35,77 +35,33 @@ export default function PhotoSphereEditor({
             y: centerY,
         });
 
-        // Get the real equirectangular dimensions of the pano
-        // Usually, PhotoSphereViewer exposes the original texture size or we default to a standard high-res size 
-        const panoWidth = viewer.textureData?.width || 2048;
-        const panoHeight = viewer.textureData?.height || 1024;
+        // Extract the visible viewport crop at full physical resolution (DPR-aware)
+        const dpr = window.devicePixelRatio || 1;
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width = Math.round(rect.width * dpr);
+        cropCanvas.height = Math.round(rect.height * dpr);
+        const ctx = cropCanvas.getContext('2d');
+        ctx.drawImage(
+            canvas,
+            Math.round(rect.x * dpr), Math.round(rect.y * dpr),
+            cropCanvas.width, cropCanvas.height,
+            0, 0,
+            cropCanvas.width, cropCanvas.height
+        );
+        const base64Crop = cropCanvas.toDataURL('image/jpeg', 0.85);
 
-        // Use an offscreen canvas to generate an equirectangular mask
+        // Build an all-white mask of the same size so Imagen 3 edits the entire region
         const maskCanvas = document.createElement('canvas');
-        maskCanvas.width = panoWidth;
-        maskCanvas.height = panoHeight;
-        const ctx = maskCanvas.getContext('2d');
-
-        // Fill completely with black
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, panoWidth, panoHeight);
-
-        // Approximate the bounding box in equirectangular space
-        // PSV yaw goes from 0 to 2PI. Pitch goes from -PI/2 to PI/2.
-        let yaw = sphericalCoords.yaw; // 0 to 2PI
-        let pitch = sphericalCoords.pitch; // -PI/2 to PI/2
-
-        // Map to x, y in pixels
-        // yaw 0 is center, PSV wraps from 0 to 2PI
-        // Actually PSV yaw 0 is at x = width / 2.
-        const center_x = (yaw / (2 * Math.PI)) * panoWidth;
-        // Pitch PI/2 is top (0), -PI/2 is bottom (height)
-        const center_y = (0.5 - pitch / Math.PI) * panoHeight;
-
-        // Estimate width and height in equirectangular pixels based on current zoom / FOV.
-        // PSV v5 does NOT have dataHelper.getFov().
-        // Instead, derive vFov from minFov/maxFov and current zoom level (0=maxFov, 100=minFov).
-        const zoomLevel = viewer.getZoomLevel(); // 0 to 100
-        const maxFov = viewer.config?.maxFov ?? 90;
-        const minFov = viewer.config?.minFov ?? 30;
-        const vFov = maxFov - (zoomLevel / 100) * (maxFov - minFov); // degrees
-        const viewportHeight = canvas.clientHeight || viewer.container.clientHeight;
-        const viewportWidth = canvas.clientWidth || viewer.container.clientWidth;
-
-        // Vertical pixels to degrees
-        const degPerPixelY = vFov / viewportHeight;
-        const maskHeightDegrees = rect.height * degPerPixelY;
-        const maskHeightPixelsEqui = (maskHeightDegrees / 180) * panoHeight;
-
-        // Horizontal pixels to degrees (approximate based on latitude)
-        const hFov = vFov * (viewportWidth / viewportHeight);
-        const degPerPixelX = hFov / viewportWidth;
-        const maskWidthDegrees = rect.width * degPerPixelX;
-        // Longitude stretches near the poles, but this is a good enough approximation for AI inpainting masks
-        const maskWidthPixelsEqui = (maskWidthDegrees / 360) * panoWidth;
-
-        // Draw white mask rectangle
-        ctx.fillStyle = '#FFFFFF';
-        // Handle wrap-around for X
-        const startX = center_x - maskWidthPixelsEqui / 2;
-        const startY = center_y - maskHeightPixelsEqui / 2;
-
-        ctx.fillRect(startX, startY, maskWidthPixelsEqui, maskHeightPixelsEqui);
-
-        // If it wraps around the right edge
-        if (startX + maskWidthPixelsEqui > panoWidth) {
-            ctx.fillRect(startX - panoWidth, startY, maskWidthPixelsEqui, maskHeightPixelsEqui);
-        }
-        // If it wraps around the left edge
-        if (startX < 0) {
-            ctx.fillRect(startX + panoWidth, startY, maskWidthPixelsEqui, maskHeightPixelsEqui);
-        }
-
-        // Extremely small low quality jpeg so payload size is minimal (< 50kb for mask)
-        const base64Mask = maskCanvas.toDataURL('image/jpeg', 0.5);
+        maskCanvas.width = cropCanvas.width;
+        maskCanvas.height = cropCanvas.height;
+        const mCtx = maskCanvas.getContext('2d');
+        mCtx.fillStyle = '#FFFFFF';
+        mCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
+        const base64Mask = maskCanvas.toDataURL('image/jpeg', 0.9);
 
         onExtractionComplete({
-            base64Crop: base64Mask, // Send the mask here
+            base64Crop,
+            base64Mask,
             pitch: sphericalCoords.pitch,
             yaw: sphericalCoords.yaw,
             width: rect.width,
