@@ -13,11 +13,16 @@ export default function PhotoSphereEditor({
     markers = [],
 }) {
     const viewerRef = useRef(null);
+    const rawViewerRef = useRef(null);
+
+    const handleReady = (instance) => {
+        rawViewerRef.current = instance;
+    };
 
     const handleSelectionComplete = (rect) => {
-        if (!viewerRef.current) return;
+        if (!rawViewerRef.current) return;
 
-        const viewer = viewerRef.current;
+        const viewer = rawViewerRef.current;
         const canvas = viewer.renderer.canvas;
 
         // Calculate center for spherical coordinates
@@ -61,8 +66,8 @@ export default function PhotoSphereEditor({
     };
 
     const handleDownloadSnapshot = async () => {
-        if (!viewerRef.current) return;
-        const viewer = viewerRef.current;
+        if (!rawViewerRef.current) return;
+        const viewer = rawViewerRef.current;
         const canvas = viewer.renderer.canvas;
 
         const mergeCanvas = document.createElement('canvas');
@@ -144,6 +149,7 @@ export default function PhotoSphereEditor({
                     touchmoveTwoFingers={true}
                     mousewheel={true}
                     plugins={plugins}
+                    onReady={handleReady}
                     rendererParameters={{ preserveDrawingBuffer: true }} // CRITICAL FOR CANVAs EXTRACTION
                 />
             </div>
