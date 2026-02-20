@@ -85,21 +85,9 @@ export function uploadVideoDirect(file, uploadUrl, requiredHeaders, onProgress) 
 }
 
 /**
- * Step C: Trigger world generation with the uploaded video asset.
+ * Base function to call the generation API
  */
-export async function generateWorld(mediaAssetId, model = 'Marble 0.1-plus') {
-    const body = {
-        display_name: 'Video World',
-        world_prompt: {
-            type: 'video',
-            video_prompt: {
-                source: 'media_asset',
-                media_asset_id: mediaAssetId,
-            }
-        },
-        model,
-    };
-
+async function _generateWorldBase(body) {
     const res = await fetch(`${BASE_URL}/worlds:generate`, {
         method: 'POST',
         headers: apiHeaders(),
@@ -113,6 +101,57 @@ export async function generateWorld(mediaAssetId, model = 'Marble 0.1-plus') {
 
     const data = await res.json();
     return data.operation_id;
+}
+
+/**
+ * Mode A: Trigger draft panorama generation from a video asset.
+ */
+export async function generateDraftPano(mediaAssetId) {
+    return _generateWorldBase({
+        display_name: 'Draft Pano',
+        world_prompt: {
+            type: 'video',
+            video_prompt: {
+                source: 'media_asset',
+                media_asset_id: mediaAssetId,
+            }
+        },
+        model: 'Marble 0.1-mini',
+    });
+}
+
+/**
+ * Mode B: Trigger an AI edit on an existing panorama using a mask and prompt.
+ */
+export async function generateInpaintPano(panoUrl, base64Mask, prompt) {
+    // CRITICAL FIX: Strip the 'data:image/jpeg;base64,' prefix before sending
+    const cleanMask = base64Mask.includes(',') ? base64Mask.split(',')[1] : base64Mask;
+
+    return _generateWorldBase({
+        display_name: 'Inpainted Pano',
+        world_prompt: {
+            type: 'inpaint-pano',
+            pano_image: { source: 'uri', uri: panoUrl },
+            pano_mask: { source: 'data_base64', data_base64: cleanMask, extension: 'jpg' },
+            text_prompt: prompt,
+        },
+        model: 'Marble 0.1-mini',
+    });
+}
+
+/**
+ * Mode C: Generate the final 3D world from a panorama image.
+ */
+export async function generateFinalWorld(finalPanoUrl) {
+    return _generateWorldBase({
+        display_name: 'Final Plus World',
+        world_prompt: {
+            type: 'image',
+            is_pano: true, // CRITICAL FIX: Ensure AI treats it as a 360 panorama, not a flat photo
+            image_prompt: { source: 'uri', uri: finalPanoUrl },
+        },
+        model: 'Marble 0.1-plus',
+    });
 }
 
 /**
@@ -160,36 +199,11 @@ export async function pollOperation(operationId, onStatus) {
 }
 
 /**
- * Full orchestration: upload video → generate → poll → return result.
- * onProgress({ phase, detail, percentage }) for UI updates.
+ * Utility to extract structured result data from a completed operation.
  */
-export async function uploadAndGenerate(videoFile, onProgress) {
-    // Phase 1 A: Prepare
-    onProgress({ phase: 'upload', detail: 'Preparing upload url...', percentage: 0 });
-    const authAndUploadInfo = await prepareUpload(videoFile.name || 'capture.mp4');
-
-    const mediaAssetId = authAndUploadInfo.media_asset.media_asset_id || authAndUploadInfo.media_asset.id;
-    const uploadUrl = authAndUploadInfo.upload_info.upload_url;
-    const requiredHeaders = authAndUploadInfo.upload_info.required_headers || {};
-
-    // Phase 1 B: Direct Upload
-    await uploadVideoDirect(videoFile, uploadUrl, requiredHeaders, (percentage) => {
-        onProgress({ phase: 'upload', detail: `Uploading Video (${percentage}%)...`, percentage });
-    });
-
-    // Phase 2: Trigger generation
-    onProgress({ phase: 'generate', detail: 'Processing in Cloud...', percentage: 100 });
-    const operationId = await generateWorld(mediaAssetId);
-
-    // Phase 3: Poll for result
-    onProgress({ phase: 'poll', detail: 'Generating 3D World (takes ~5 mins)...' });
-    const result = await pollOperation(operationId, (description) => {
-        onProgress({ phase: 'poll', detail: description });
-    });
-
-    // Extract result data
-    const response = result.response || {};
-    const worldId = result.metadata?.world_id || response.id;
+export function extractWorldResult(pollResponse) {
+    const response = pollResponse.response || {};
+    const worldId = pollResponse.metadata?.world_id || response.id;
 
     return {
         panoUrl: response.assets?.imagery?.pano_url || null,
