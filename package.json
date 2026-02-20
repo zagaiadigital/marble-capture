@@ -9,9 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@photo-sphere-viewer/core": "^5.14.1",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-photo-sphere-viewer": "^6.2.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

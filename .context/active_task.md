@@ -1,1 +1,1 @@
-Implement Advanced Create Workflow: Video -> Mini Pano Generation -> Canvas Mask Editor -> InpaintPanoPrompt -> Final Plus Generation
+Pivot to High-Res 360 Image Studio. Implement react-photo-sphere-viewer (or pannellum-react). Remove 6DoF generation.

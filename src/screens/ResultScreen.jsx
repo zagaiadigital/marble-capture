@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import {
     Download,
-    ExternalLink,
     Camera,
     Globe,
     Share2,
     Check,
 } from 'lucide-react';
+import { ReactPhotoSphereViewer } from 'react-photo-sphere-viewer';
+import '@photo-sphere-viewer/core/index.css';
 
 export default function ResultScreen() {
     const { worldResult, resetAll } = useAppContext();
@@ -21,7 +22,7 @@ export default function ResultScreen() {
         );
     }
 
-    const { panoUrl, worldMarbleUrl, caption, thumbnailUrl } = worldResult;
+    const { panoUrl, caption, thumbnailUrl } = worldResult;
 
     const handleDownload = async () => {
         if (!panoUrl) return;
@@ -43,18 +44,18 @@ export default function ResultScreen() {
     };
 
     const handleShare = async () => {
-        if (navigator.share && worldMarbleUrl) {
+        if (navigator.share && panoUrl) {
             try {
                 await navigator.share({
-                    title: 'My 3D World — Marble',
-                    text: caption || 'Check out this 3D world I created!',
-                    url: worldMarbleUrl,
+                    title: 'My 360 World — Marble',
+                    text: caption || 'Check out this 360 world I created!',
+                    url: panoUrl, // Fallback to sharing the direct image url
                 });
             } catch {
                 // User cancelled or share failed
             }
-        } else if (worldMarbleUrl) {
-            await navigator.clipboard.writeText(worldMarbleUrl);
+        } else if (panoUrl) {
+            await navigator.clipboard.writeText(panoUrl);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }
@@ -75,14 +76,19 @@ export default function ResultScreen() {
                 </div>
             </div>
 
-            {/* Immersive 3D Iframe */}
-            <div className="flex-1 min-h-0 relative bg-black">
-                {worldMarbleUrl ? (
-                    <iframe
-                        src={worldMarbleUrl}
-                        className="w-full h-full border-none"
-                        allow="fullscreen; xr-spatial-tracking"
-                        title="3D World View"
+            {/* Immersive 360 Viewer */}
+            <div className="flex-1 min-h-0 relative bg-black cursor-grab active:cursor-grabbing">
+                {panoUrl ? (
+                    <ReactPhotoSphereViewer
+                        src={panoUrl}
+                        height="100%"
+                        width="100%"
+                        containerClass="w-full h-full"
+                        navbar={[]}
+                        defaultYaw={0}
+                        defaultPitch={0}
+                        touchmoveTwoFingers={true}
+                        mousewheel={true}
                     />
                 ) : thumbnailUrl ? (
                     <div className="w-full h-full flex items-center justify-center p-4">
@@ -101,19 +107,6 @@ export default function ResultScreen() {
 
             {/* Actions */}
             <div className="shrink-0 px-4 pb-8 pt-4 flex flex-col gap-2.5 safe-area-bottom glass z-10 border-t border-cyber-border/30">
-                {/* View in Marble - only show external link if iframe failed or user prefers native browser view */}
-                {worldMarbleUrl && (
-                    <a
-                        href={worldMarbleUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full bg-neon-green text-cyber-bg font-bold py-4 rounded-xl flex items-center justify-center gap-2 text-sm uppercase tracking-wider transition-all active:scale-[0.98] hover:shadow-[0_0_30px_rgba(0,255,157,0.3)] no-underline"
-                    >
-                        <ExternalLink className="w-4 h-4" strokeWidth={2} />
-                        View in Full Browser
-                    </a>
-                )}
-
                 {/* Download + Share row */}
                 <div className="flex gap-2.5">
                     {panoUrl && (

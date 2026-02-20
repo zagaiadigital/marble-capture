@@ -104,11 +104,11 @@ async function _generateWorldBase(body) {
 }
 
 /**
- * Mode A: Trigger draft panorama generation from a video asset.
+ * Mode A: Trigger high-res panorama generation from a video asset.
  */
-export async function generateDraftPano(mediaAssetId) {
+export async function generateHighResPano(mediaAssetId) {
     return _generateWorldBase({
-        display_name: 'Draft Pano',
+        display_name: 'High-Res Pano',
         world_prompt: {
             type: 'video',
             video_prompt: {
@@ -116,7 +116,7 @@ export async function generateDraftPano(mediaAssetId) {
                 media_asset_id: mediaAssetId,
             }
         },
-        model: 'Marble 0.1-mini',
+        model: 'Marble 0.1-plus',
     });
 }
 
@@ -135,24 +135,10 @@ export async function generateInpaintPano(panoUrl, base64Mask, prompt) {
             pano_mask: { source: 'data_base64', data_base64: cleanMask, extension: 'jpg' },
             text_prompt: prompt,
         },
-        model: 'Marble 0.1-mini',
-    });
-}
-
-/**
- * Mode C: Generate the final 3D world from a panorama image.
- */
-export async function generateFinalWorld(finalPanoUrl) {
-    return _generateWorldBase({
-        display_name: 'Final Plus World',
-        world_prompt: {
-            type: 'image',
-            is_pano: true, // CRITICAL FIX: Ensure AI treats it as a 360 panorama, not a flat photo
-            image_prompt: { source: 'uri', uri: finalPanoUrl },
-        },
         model: 'Marble 0.1-plus',
     });
 }
+
 
 /**
  * Step D: Poll an operation until done.
@@ -200,17 +186,40 @@ export async function pollOperation(operationId, onStatus) {
 
 /**
  * Utility to extract structured result data from a completed operation.
+ * Includes an async fallback to fetch the full world if pano_url is delayed.
  */
-export function extractWorldResult(pollResponse) {
+export async function extractWorldResult(pollResponse) {
     const response = pollResponse.response || {};
     const worldId = pollResponse.metadata?.world_id || response.id;
 
+    let panoUrl = response.assets?.imagery?.pano_url || null;
+    let thumbnailUrl = response.assets?.thumbnail_url || null;
+    let caption = response.assets?.caption || '';
+
+    // FALLBACK: If panoUrl is missing from the operation snapshot, fetch the full world directly
+    if (!panoUrl && worldId) {
+        try {
+            console.log("Pano URL missing in snapshot, fetching full world data...");
+            const worldRes = await fetch(`${BASE_URL}/worlds/${worldId}`, {
+                method: 'GET',
+                headers: apiHeaders(),
+            });
+            if (worldRes.ok) {
+                const worldData = await worldRes.json();
+                const world = worldData.world || {};
+                panoUrl = world.assets?.imagery?.pano_url || panoUrl;
+                thumbnailUrl = world.assets?.thumbnail_url || thumbnailUrl;
+                caption = world.assets?.caption || caption;
+            }
+        } catch (e) {
+            console.warn("Failed to fetch full world data:", e);
+        }
+    }
+
     return {
-        panoUrl: response.assets?.imagery?.pano_url || null,
-        thumbnailUrl: response.assets?.thumbnail_url || null,
-        caption: response.assets?.caption || '',
-        worldMarbleUrl: response.world_marble_url || `https://marble.worldlabs.ai/world/${worldId}`,
-        worldId,
-        splats: response.assets?.splats?.spz_urls || null,
+        panoUrl,
+        thumbnailUrl,
+        caption,
+        worldId
     };
 }

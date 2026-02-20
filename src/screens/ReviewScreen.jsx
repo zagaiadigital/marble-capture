@@ -3,12 +3,13 @@ import { useAppContext } from '../context/AppContext';
 import {
     prepareUpload,
     uploadVideoDirect,
-    generateDraftPano,
+    generateHighResPano,
     pollOperation,
     generateInpaintPano,
-    generateFinalWorld,
     extractWorldResult
 } from '../services/worldLabs';
+import { ReactPhotoSphereViewer } from 'react-photo-sphere-viewer';
+import '@photo-sphere-viewer/core/index.css';
 import MaskCanvas from '../components/MaskCanvas';
 import {
     RotateCcw,
@@ -25,9 +26,8 @@ import {
 
 const PHASE_CONFIG = {
     upload: { icon: Upload, color: 'text-neon-amber', label: 'UPLOADING VIDEO' },
-    generateDraft: { icon: Loader2, color: 'text-neon-amber', label: 'EXTRACTING 360 DRAFT...' },
+    generateDraft: { icon: Loader2, color: 'text-neon-amber', label: 'Stitching & Rendering High-Res 360 Image (Takes ~5 minutes)...' },
     inpaint: { icon: Wand2, color: 'text-neon-amber', label: 'PROCESSING AI EDIT...' },
-    finalize: { icon: Sparkles, color: 'text-neon-green', label: 'GENERATING FINAL 3D WORLD (~5 MINS)' },
 };
 
 export default function ReviewScreen() {
@@ -68,8 +68,8 @@ export default function ReviewScreen() {
                 });
 
                 // Phase 2: Trigger mode A
-                setProgress({ phase: 'generateDraft', detail: 'Processing video framing...', percentage: 100 });
-                const operationId = await generateDraftPano(mediaAssetId);
+                setProgress({ phase: 'generateDraft', detail: 'Processing high-res 360 extraction...', percentage: 100 });
+                const operationId = await generateHighResPano(mediaAssetId);
 
                 // Phase 3: Poll
                 setProgress({ phase: 'generateDraft', detail: 'Generating 360 draft outline...' });
@@ -77,7 +77,7 @@ export default function ReviewScreen() {
                     setProgress({ phase: 'generateDraft', detail: description });
                 });
 
-                const extractedResult = extractWorldResult(result);
+                const extractedResult = await extractWorldResult(result);
                 if (extractedResult.panoUrl) {
                     setPanoUrl(extractedResult.panoUrl);
                     setProgress(null); // Stop processing UI, show Studio
@@ -118,7 +118,7 @@ export default function ReviewScreen() {
                 setProgress({ phase: 'inpaint', detail: description });
             });
 
-            const extractedResult = extractWorldResult(result);
+            const extractedResult = await extractWorldResult(result);
             if (extractedResult.panoUrl) {
                 // Return to Studio view with new pano image
                 setPanoUrl(extractedResult.panoUrl);
@@ -135,29 +135,11 @@ export default function ReviewScreen() {
         }
     };
 
-    // Step 4 (Finalization) - Call API Mode C
-    const handleGenerateFinalWorld = async () => {
+    // Step 4 (Finalization) - Export and navigate
+    const handleFinishAndExport = () => {
         if (!panoUrl) return;
-
-        setError(null);
-        setProgress({ phase: 'finalize', detail: 'Starting Advanced 3D Pipeline...' });
-
-        try {
-            const operationId = await generateFinalWorld(panoUrl);
-
-            const result = await pollOperation(operationId, (description) => {
-                setProgress({ phase: 'finalize', detail: description });
-            });
-
-            // Store final result and navigate
-            const finalResult = extractWorldResult(result);
-            setWorldResult(finalResult);
-            setScreen(SCREENS.RESULT);
-        } catch (err) {
-            console.error('Final Generation failed:', err);
-            setError(err.message);
-            setProgress(null);
-        }
+        setWorldResult({ panoUrl });
+        setScreen(SCREENS.RESULT);
     };
 
     if (!videoFile) {
@@ -256,24 +238,31 @@ export default function ReviewScreen() {
             )}
 
             <div className="flex-1 p-4 overflow-hidden flex flex-col items-center justify-center">
-                <div className="w-full relative rounded-2xl overflow-hidden border border-cyber-border group bg-black aspect-[2/1] shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+                <div className="w-full relative rounded-2xl overflow-hidden border border-cyber-border group bg-black h-full max-h-[60vh] shadow-[0_0_40px_rgba(0,0,0,0.5)]">
                     {panoUrl ? (
-                        <img
-                            src={panoUrl}
-                            alt="360 Draft"
-                            className="w-full h-full object-cover select-none"
-                            crossOrigin="anonymous"
-                        />
+                        <div className="w-full h-full cursor-grab active:cursor-grabbing">
+                            <ReactPhotoSphereViewer
+                                src={panoUrl}
+                                height="100%"
+                                width="100%"
+                                containerClass="w-full h-full"
+                                navbar={[]}
+                                defaultYaw={0}
+                                defaultPitch={0}
+                                touchmoveTwoFingers={true}
+                                mousewheel={true}
+                            />
+                        </div>
                     ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                            <span className="text-cyber-text-dim">Draft Loading...</span>
+                            <span className="text-cyber-text-dim">Studio Loading...</span>
                         </div>
                     )}
 
-                    <div className="absolute top-3 left-3 flex items-center gap-2">
+                    <div className="absolute top-3 left-3 flex items-center gap-2 z-10 pointer-events-none">
                         <span className="font-mono text-[10px] text-white/80 bg-black/60 rounded px-2 py-1 flex items-center gap-1.5 backdrop-blur-sm border border-cyber-border/50">
                             <span className="w-1.5 h-1.5 rounded-full bg-neon-amber animate-pulse" />
-                            DRAFT PANO
+                            INTERACTIVE 360 STUDIO
                         </span>
                     </div>
                 </div>
@@ -324,11 +313,11 @@ export default function ReviewScreen() {
                 </button>
 
                 <button
-                    onClick={handleGenerateFinalWorld}
+                    onClick={handleFinishAndExport}
                     className="w-full bg-neon-green text-cyber-bg font-bold py-4 rounded-xl flex items-center justify-center gap-2 text-sm uppercase tracking-wider transition-all active:scale-[0.98] hover:shadow-[0_0_30px_rgba(0,255,157,0.3)]"
                 >
-                    <Sparkles className="w-4 h-4" strokeWidth={2} />
-                    Generate Final 3D World
+                    <Upload className="w-4 h-4" strokeWidth={2} />
+                    Finish & Export
                 </button>
 
                 <button
