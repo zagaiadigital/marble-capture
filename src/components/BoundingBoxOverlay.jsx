@@ -19,6 +19,7 @@ export default function BoundingBoxOverlay({ onSelectionComplete, onCancel }) {
     }, [onCancel]);
 
     const handlePointerDown = (e) => {
+        e.stopPropagation();
         setIsDrawing(true);
         const rect = containerRef.current.getBoundingClientRect();
         const x = e.clientX - rect.left;
@@ -28,6 +29,7 @@ export default function BoundingBoxOverlay({ onSelectionComplete, onCancel }) {
     };
 
     const handlePointerMove = (e) => {
+        e.stopPropagation();
         if (!isDrawing) return;
         const rect = containerRef.current.getBoundingClientRect();
         const x = e.clientX - rect.left;
@@ -35,7 +37,8 @@ export default function BoundingBoxOverlay({ onSelectionComplete, onCancel }) {
         setCurrentPos({ x, y });
     };
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (e) => {
+        if (e && e.stopPropagation) e.stopPropagation();
         if (!isDrawing) return;
         setIsDrawing(false);
 

@@ -51,7 +51,11 @@ export default function ReviewScreen() {
         if (panoUrl || progress) return;
 
         if (videoFile.type.startsWith('image/')) {
-            setPanoUrl(URL.createObjectURL(videoFile));
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setPanoUrl(reader.result);
+            };
+            reader.readAsDataURL(videoFile);
             return;
         }
 
@@ -155,7 +159,7 @@ export default function ReviewScreen() {
     // Step 4 (Finalization) - Export and navigate
     const handleFinishAndExport = () => {
         if (!panoUrl) return;
-        setWorldResult({ panoUrl });
+        setWorldResult({ panoUrl, markers }); // Agora preserva os móveis adicionados
         setScreen(SCREENS.RESULT);
     };
 
@@ -244,8 +248,8 @@ export default function ReviewScreen() {
                 </div>
             )}
 
-            <div className="flex-1 p-4 overflow-hidden flex flex-col items-center justify-center">
-                <div className="w-full relative h-full max-h-[60vh]">
+            <div className="flex-1 relative w-full h-full overflow-hidden">
+                <div className="absolute inset-0 w-full h-full">
                     {panoUrl ? (
                         <PhotoSphereEditor
                             panoUrl={panoUrl}
@@ -264,7 +268,7 @@ export default function ReviewScreen() {
 
             {/* Prompt Input Modal Overlay */}
             {showPromptInput && (
-                <div className="absolute inset-0 z-40 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
                     <div className="glass w-full max-w-sm rounded-2xl p-5 border border-neon-green/30">
                         <h3 className="text-white font-bold mb-2">Edit Additions</h3>
                         <p className="text-xs text-cyber-text-dim mb-4">
@@ -297,26 +301,29 @@ export default function ReviewScreen() {
                 </div>
             )}
 
-            <div className="shrink-0 px-4 pb-8 pt-4 flex flex-col gap-3 safe-area-bottom glass z-10 border-t border-cyber-border/30">
-                <button
-                    onClick={() => setIsEditing(true)}
-                    className="w-full glass py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all hover:bg-white/5"
-                >
-                    <Paintbrush className="w-4 h-4 text-neon-amber" strokeWidth={2} />
-                    Edit / Add Furniture (AI)
-                </button>
+            {/* Dock de ações sobreposto na base da tela */}
+            <div className="absolute bottom-0 left-0 right-0 px-4 pb-6 pt-4 flex flex-col gap-2 z-10 bg-black/80 backdrop-blur-md border-t border-cyber-border/50 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setIsEditing(true)}
+                        className="flex-1 glass py-3 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-white transition-all hover:bg-white/10"
+                    >
+                        <Paintbrush className="w-4 h-4 text-neon-amber" strokeWidth={2} />
+                        Edit (AI)
+                    </button>
 
-                <button
-                    onClick={handleFinishAndExport}
-                    className="w-full bg-neon-green text-cyber-bg font-bold py-4 rounded-xl flex items-center justify-center gap-2 text-sm uppercase tracking-wider transition-all active:scale-[0.98] hover:shadow-[0_0_30px_rgba(0,255,157,0.3)]"
-                >
-                    <Upload className="w-4 h-4" strokeWidth={2} />
-                    Finish & Export
-                </button>
+                    <button
+                        onClick={handleFinishAndExport}
+                        className="flex-1 bg-neon-green text-black font-bold py-3 rounded-xl flex items-center justify-center gap-2 text-sm uppercase tracking-wider transition-all active:scale-[0.98]"
+                    >
+                        <Upload className="w-4 h-4" strokeWidth={2} />
+                        Export
+                    </button>
+                </div>
 
                 <button
                     onClick={resetCapture}
-                    className="w-full py-3.5 flex items-center justify-center gap-2 text-xs font-medium text-cyber-text-dim hover:text-white transition-colors"
+                    className="w-full py-2 flex items-center justify-center gap-2 text-[11px] font-medium text-cyber-text-dim hover:text-white transition-colors"
                 >
                     <RotateCcw className="w-3 h-3" strokeWidth={1.5} />
                     Restart Process

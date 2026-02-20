@@ -216,6 +216,10 @@ export async function extractWorldResult(pollResponse) {
         }
     }
 
+    if (panoUrl && panoUrl.includes('storage.googleapis.com')) {
+        panoUrl = panoUrl.replace('https://storage.googleapis.com/', '/gcs-proxy/');
+    }
+
     return {
         panoUrl,
         thumbnailUrl,

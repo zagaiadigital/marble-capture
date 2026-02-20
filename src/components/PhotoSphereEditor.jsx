@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import { ReactPhotoSphereViewer } from 'react-photo-sphere-viewer';
 import { MarkersPlugin } from '@photo-sphere-viewer/markers-plugin';
 import '@photo-sphere-viewer/markers-plugin/index.css';
@@ -124,11 +124,9 @@ export default function PhotoSphereEditor({
     }, [markers]);
 
     // plugins array only used for initial mount configuration
-    const plugins = [
-        [MarkersPlugin, {
-            markers: markers,
-        }],
-    ];
+    const plugins = useMemo(() => [
+        [MarkersPlugin, { markers: markers }],
+    ], []); // O array vazio previne o crash do raycaster
 
     return (
         <div className="w-full h-full relative group bg-black shadow-[0_0_40px_rgba(0,0,0,0.5)] overflow-hidden rounded-2xl border border-cyber-border">

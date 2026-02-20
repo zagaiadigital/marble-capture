@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import {
     Download,
@@ -8,7 +8,9 @@ import {
     Check,
 } from 'lucide-react';
 import { ReactPhotoSphereViewer } from 'react-photo-sphere-viewer';
+import { MarkersPlugin } from '@photo-sphere-viewer/markers-plugin';
 import '@photo-sphere-viewer/core/index.css';
+import '@photo-sphere-viewer/markers-plugin/index.css';
 
 export default function ResultScreen() {
     const { worldResult, resetAll } = useAppContext();
@@ -22,7 +24,8 @@ export default function ResultScreen() {
         );
     }
 
-    const { panoUrl, caption, thumbnailUrl } = worldResult;
+    const { panoUrl, caption, thumbnailUrl, markers = [] } = worldResult;
+    const plugins = useMemo(() => [[MarkersPlugin, { markers }]], [markers]);
 
     const handleDownload = async () => {
         if (!panoUrl) return;
@@ -89,6 +92,7 @@ export default function ResultScreen() {
                         defaultPitch={0}
                         touchmoveTwoFingers={true}
                         mousewheel={true}
+                        plugins={plugins}
                     />
                 ) : thumbnailUrl ? (
                     <div className="w-full h-full flex items-center justify-center p-4">
@@ -109,7 +113,7 @@ export default function ResultScreen() {
             <div className="shrink-0 px-4 pb-8 pt-4 flex flex-col gap-2.5 safe-area-bottom glass z-10 border-t border-cyber-border/30">
                 {/* Download + Share row */}
                 <div className="flex gap-2.5">
-                    {panoUrl && (
+                    {panoUrl && markers.length === 0 && (
                         <button
                             onClick={handleDownload}
                             className="flex-1 glass py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm font-medium text-cyber-text hover:text-white transition-colors border border-cyber-border/50"
@@ -119,22 +123,24 @@ export default function ResultScreen() {
                         </button>
                     )}
 
-                    <button
-                        onClick={handleShare}
-                        className="flex-1 glass py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm font-medium text-cyber-text hover:text-white transition-colors border border-cyber-border/50"
-                    >
-                        {copied ? (
-                            <>
-                                <Check className="w-4 h-4 text-neon-green" strokeWidth={2} />
-                                <span className="text-neon-green">Copied!</span>
-                            </>
-                        ) : (
-                            <>
-                                <Share2 className="w-4 h-4" strokeWidth={1.5} />
-                                Share Link
-                            </>
-                        )}
-                    </button>
+                    {panoUrl && !panoUrl.startsWith('blob:') && !panoUrl.startsWith('data:') && (
+                        <button
+                            onClick={handleShare}
+                            className="flex-1 glass py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm font-medium text-cyber-text hover:text-white transition-colors border border-cyber-border/50"
+                        >
+                            {copied ? (
+                                <>
+                                    <Check className="w-4 h-4 text-neon-green" strokeWidth={2} />
+                                    <span className="text-neon-green">Copied!</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Share2 className="w-4 h-4" strokeWidth={1.5} />
+                                    Share Link
+                                </>
+                            )}
+                        </button>
+                    )}
                 </div>
 
                 {/* New Capture */}
