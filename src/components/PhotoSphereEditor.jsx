@@ -62,11 +62,15 @@ export default function PhotoSphereEditor({
         // Pitch PI/2 is top (0), -PI/2 is bottom (height)
         const center_y = (0.5 - pitch / Math.PI) * panoHeight;
 
-        // Estimate width and height in equirectangular pixels based on current zoom / FOV
-        const zoom = viewer.getZoomLevel(); // 0 to 100
-        const vFov = viewer.dataHelper.getFov(); // vertical FOV in degrees
-        const viewportHeight = canvas.clientHeight;
-        const viewportWidth = canvas.clientWidth;
+        // Estimate width and height in equirectangular pixels based on current zoom / FOV.
+        // PSV v5 does NOT have dataHelper.getFov().
+        // Instead, derive vFov from minFov/maxFov and current zoom level (0=maxFov, 100=minFov).
+        const zoomLevel = viewer.getZoomLevel(); // 0 to 100
+        const maxFov = viewer.config?.maxFov ?? 90;
+        const minFov = viewer.config?.minFov ?? 30;
+        const vFov = maxFov - (zoomLevel / 100) * (maxFov - minFov); // degrees
+        const viewportHeight = canvas.clientHeight || viewer.container.clientHeight;
+        const viewportWidth = canvas.clientWidth || viewer.container.clientWidth;
 
         // Vertical pixels to degrees
         const degPerPixelY = vFov / viewportHeight;
