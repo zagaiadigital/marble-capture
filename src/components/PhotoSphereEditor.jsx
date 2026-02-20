@@ -23,7 +23,8 @@ export default function PhotoSphereEditor({
         if (!rawViewerRef.current) return;
 
         const viewer = rawViewerRef.current;
-        const canvas = viewer.renderer.canvas;
+        const canvas = viewer.container.querySelector('canvas');
+        if (!canvas) return;
 
         // Calculate center for spherical coordinates
         const centerX = rect.x + rect.width / 2;
@@ -68,7 +69,8 @@ export default function PhotoSphereEditor({
     const handleDownloadSnapshot = async () => {
         if (!rawViewerRef.current) return;
         const viewer = rawViewerRef.current;
-        const canvas = viewer.renderer.canvas;
+        const canvas = viewer.container.querySelector('canvas');
+        if (!canvas) return;
 
         const mergeCanvas = document.createElement('canvas');
         mergeCanvas.width = canvas.width;
