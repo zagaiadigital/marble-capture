@@ -117,34 +117,25 @@ export default function ReviewScreen() {
 
         setShowPromptInput(false);
         setError(null);
-        setProgress({ phase: 'inpaint', detail: 'Processing Edit request...' });
+        setProgress({ phase: 'inpaint', detail: 'Applying AI Edit to 360 World...' });
 
         try {
-            const response = await fetch('/api/edit-area', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    prompt: editPrompt.trim(),
-                    base64Image: cropData.base64Crop,
-                    pitch: cropData.pitch,
-                    yaw: cropData.yaw
-                })
+            // mode B: Trigger Inpaint
+            const operationId = await generateInpaintPano(panoUrl, cropData.base64Crop, editPrompt.trim());
+
+            // Poll for the result
+            const result = await pollOperation(operationId, (description) => {
+                setProgress({ phase: 'inpaint', detail: description });
             });
 
-            if (!response.ok) throw new Error('Failed to generate edit');
-
-            const data = await response.json();
-
-            // Re-apply prefix for browser rendering
-            const renderableImage = "data:image/jpeg;base64," + data.editedImage;
-
-            setMarkers(prev => [...prev, {
-                id: `edited-${Date.now()}`,
-                position: { pitch: cropData.pitch, yaw: cropData.yaw },
-                image: renderableImage,
-                size: { width: cropData.width, height: cropData.height },
-                anchor: 'center center',
-            }]);
+            const extractedResult = await extractWorldResult(result);
+            if (extractedResult.panoUrl) {
+                // Completely replace the current Pano with the newly edited World
+                setPanoUrl(extractedResult.panoUrl);
+                // Clear any leftover markers (if needed) or keep them. WL returns a newly painted image, no DOM marker needed!
+            } else {
+                throw new Error("Edit succeeded but returned no pano_url.");
+            }
 
             setCropData(null);
             setEditPrompt("");

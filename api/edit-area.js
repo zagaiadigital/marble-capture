@@ -24,15 +24,18 @@ export default async function handler(req, res) {
         const pureBase64 = base64Image.replace(/^data:image\/\w+;base64,/, "");
 
         const response = await ai.models.editImage({
-            model: 'gemini-3.1-nano-banana-pro',
+            model: 'imagen-3.0-capability-001',
             prompt: prompt,
-            referenceImage: {
-                inlineData: {
-                    data: pureBase64,
-                    mimeType: 'image/jpeg'
+            referenceImages: [
+                {
+                    image: {
+                        imageBytes: pureBase64,
+                    }
                 }
-            },
-            editMode: 'INPAINT_INSERT',
+            ],
+            config: {
+                editMode: 'INPAINT_INSERT',
+            }
         });
 
         if (!response.generatedImages || response.generatedImages.length === 0) {
